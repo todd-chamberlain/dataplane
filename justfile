@@ -2,12 +2,12 @@
 # Copyright Open Network Fabric Authors
 
 set unstable := true
-set shell := [x"${SHELL:-bash}", "-euo", "pipefail", "-c"]
-set script-interpreter := [x"${SHELL:-bash}", "-euo", "pipefail"]
+set shell := ["/usr/bin/env", "bash", "-euo", "pipefail", "-c"]
+set script-interpreter := ["/usr/bin/env", "bash", "-euo", "pipefail"]
 
 # enable to debug just recipes
-
 debug_justfile := "false"
+
 [private]
 _just_debuggable_ := if debug_justfile == "true" { "set -x" } else { "" }
 
@@ -29,13 +29,11 @@ instrument := "none"
 # target platform (x86-64-v3/bluefield2)
 platform := "x86-64-v3"
 
-# comma delimited list of sanitizers to use with bolero
-sanitizers := "address,leak"
-
 version_extra := ""
 version_platform := if platform == "x86-64-v3" { "" } else { "-" + platform }
 version_profile := if profile == "release" { "" } else { "-" + profile }
-version := env("VERSION", "") || `git describe --tags --dirty --always` + version_platform + version_profile + version_extra
+version_san := if sanitize == "" { "" } else { "-san." + replace(sanitize, ",", ".") }
+version := env("VERSION", "") || `git describe --tags --dirty --always` + version_platform + version_profile + version_san + version_extra
 
 # Print version that will be used in the build
 version:
@@ -43,20 +41,26 @@ version:
 
 # OCI repo to push images to
 
-oci_repo := "127.0.0.1:30000"
+oci_repo := "192.168.19.1:30000"
 oci_insecure := ""
 oci_name := "githedgehog/dataplane"
-oci_image_full := oci_repo + "/" + oci_name + ":" + version
+oci_frr_prefix := "githedgehog/dpdk-sys/frr"
+oci_image_dataplane := oci_repo + "/" + oci_name + ":" + version
+oci_image_frr_dataplane := oci_repo + "/" + oci_frr_prefix + ":" + version
+oci_image_frr_host := oci_repo + "/" + oci_frr_prefix + "-host:" + version
 
 [private]
 _skopeo_dest_insecure := if oci_insecure == "true" { "--dest-tls-verify=false" } else { "" }
+
+[private]
+docker_sock := "/run/docker/docker.sock"
 
 # Set DOCKER_HOST and DOCKER_SOCK if /var/run/docker.sock exists and they are not already set
 [private]
 _setup_docker_env_ := ```
     if [ -S /var/run/docker.sock ]; then
-      declare -r DOCKER_HOST="${DOCKER_HOST:-unix:///var/run/docker.sock}"
-      declare -r DOCKER_SOCK="${DOCKER_SOCK:-/var/run/docker.sock}"
+      declare -r DOCKER_HOST="${DOCKER_HOST:-unix:/{{docker_sock}}}"
+      declare -r DOCKER_SOCK="${DOCKER_SOCK:-{{docker_sock}}}"
       export DOCKER_HOST
       export DOCKER_SOCK
     fi
@@ -64,14 +68,32 @@ _setup_docker_env_ := ```
 
 # Build a nix derivation with standard build arguments
 [script]
-build target *args:
+build target="dataplane-tar" *args:
     {{ _just_debuggable_ }}
-    nix build -f default.nix {{ target }} \
+    mkdir -p results
+    declare -r target="{{target}}"
+    nix build -f default.nix "${target}" \
       --argstr profile {{ profile }} \
       --argstr sanitize '{{ sanitize }}' \
       --argstr instrumentation {{ instrument }} \
       --argstr platform {{ platform }} \
+      --print-build-logs \
+      --out-link "results/${target}" \
       {{ args }}
+
+[script]
+test package="" *args: (build (if package == "" { "tests.all" } else { "tests.pkg." + package }))
+    {{ _just_debuggable_ }}
+    if [ -z "{{package}}" ]; then
+      declare -r package="tests.all"
+    else
+      declare -r package="tests.pkg.{{package}}"
+    fi
+    nix-shell --run "cargo nextest run --archive-file results/${package}/*.tar.zst --workspace-remap $(pwd)"
+
+[script]
+docs package="" *args: (build (if package == "" { "docs.all" } else { "docs.pkg." + package }) args)
+    {{ _just_debuggable_ }}
 
 # Create devroot and sysroot symlinks for local development
 [script]
@@ -92,62 +114,64 @@ setup-roots *args:
       --out-link sysroot \
       {{ args }}
 
-# Build the dataplane container tar
+# Build the dataplane container image
 [script]
-build-container *args:
-    {{ _just_debuggable_ }}
-    mkdir -p results
-    nix build -f default.nix dataplane-tar \
-      --argstr profile {{ profile }} \
-      --argstr sanitize '{{ sanitize }}' \
-      --argstr instrumentation {{ instrument }} \
-      --argstr platform {{ platform }} \
-      --out-link results/dataplane.tar \
-      {{ args }}
-
-# Load the dataplane container tar into docker
-[script]
-load-container: build-container
+build-container target="dataplane" *args: (build (if target == "dataplane" { "dataplane-tar" } else { "containers." + target }) args)
     {{ _just_debuggable_ }}
     {{ _setup_docker_env_ }}
-    docker import ./results/dataplane.tar dataplane:{{version}}
+    case "{{target}}" in
+        "dataplane" | "dataplane-tar")
+            docker import --change "ENV PATH=/bin" --change 'ENTRYPOINT ["/bin/dataplane"]' ./results/dataplane-tar {{ oci_image_dataplane }}
+            echo "imported {{ oci_image_dataplane }}"
+            ;;
+        "frr.dataplane")
+            docker load < ./results/containers.frr.dataplane
+            docker tag "githedgehog/frr-dataplane:latest" "{{oci_image_frr_dataplane}}"
+            echo "imported {{oci_image_frr_dataplane}}"
+            ;;
+        "frr.host")
+            docker load < ./results/containers.frr.host
+            docker tag "githedgehog/frr-host:latest" "{{oci_image_frr_host}}"
+            echo "imported {{oci_image_frr_host}}"
+            ;;
+        *)
+            >&2 echo "{{target}}" not a valid container
+            exit 99
+    esac
 
 # Build and push the dataplane container
 [script]
-push-container: load-container && version
+push-container target="dataplane" *args: (build-container target args) && version
     {{ _just_debuggable_ }}
     {{ _setup_docker_env_ }}
-    skopeo copy \
-      {{ _skopeo_dest_insecure }} \
-      docker-daemon:dataplane:{{version}} \
-      docker://{{ oci_image_full }}
-    echo "Pushed {{ oci_image_full }}"
+    case "{{target}}" in
+        "dataplane" | "dataplane-tar")
+            skopeo copy --dest-tls-verify=false docker-daemon:{{ oci_image_dataplane }} docker://{{ oci_image_dataplane }}
+            echo "Pushed {{ oci_image_dataplane }}"
+            ;;
+        "frr.dataplane")
+            skopeo copy --dest-tls-verify=false docker-daemon:{{oci_image_frr_dataplane}} docker://{{oci_image_frr_dataplane}}
+            echo "Pushed {{ oci_image_frr_dataplane }}"
+            ;;
+        "frr.host")
+            skopeo copy --dest-tls-verify=false docker-daemon:{{oci_image_frr_host}} docker://{{oci_image_frr_host}}
+            echo "Pushed {{ oci_image_frr_host }}"
+            ;;
+        *)
+            >&2 echo "{{target}}" not a valid container
+            exit 99
+    esac
 
 # Print names of container images to build or push
 [script]
 print-container-tags:
-    echo "{{ oci_image_full }}"
+    echo "{{ oci_image_dataplane }}"
 
 # Run Clippy
 [script]
 clippy *args:
     {{ _just_debuggable_ }}
     cargo clippy --all-targets --all-features {{ args }} -- -D warnings
-
-# List available bolero fuzz tests
-[script]
-list-fuzz-tests *args:
-    {{ _just_debuggable_ }}
-    cargo bolero list --sanitizer={{ sanitizers }} --build-std --profile=fuzz {{ args }}
-
-# Run the full fuzzer / property-checker on a bolero test. Args are forwarded to bolero
-[script]
-fuzz test timeout="-T 60sec" *args="--engine=libfuzzer --engine-args=-max_len=65536":
-    {{ _just_debuggable_ }}
-    cargo bolero test {{ test }} --build-std --profile=fuzz --sanitizer={{ sanitizers }} {{ timeout }} {{ args }}
-
-# Run the full fuzzer / property-checker on a bolero test with the AFL fuzzer
-fuzz-afl test: (fuzz test "" "--engine=afl" "--engine-args=-mnone")
 
 # Allocate 2M hugepages (if needed)
 [private]

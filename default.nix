@@ -6,6 +6,7 @@
   profile ? "debug",
   instrumentation ? "none",
   sanitize ? "",
+  tag ? "latest",
 }:
 let
   sources = import ./npins;
@@ -390,8 +391,44 @@ let
     }
   ) package-list;
 
-  min-tar = pkgs.stdenv'.mkDerivation {
-    pname = "min-tar";
+  docs-builder =
+    {
+      package ? null,
+    }:
+    let
+      pname = if package != null then package else "all-docs";
+    in
+    pkgs.callPackage invoke {
+      builder = craneLib.mkCargoDerivation;
+      args = {
+        inherit pname;
+        cargoArtifacts = null;
+        RUSTDOCFLAGS = "-D warnings";
+        buildPhaseCargoCommand = builtins.concatStringsSep " " (
+          [
+            "cargo"
+            "doc"
+            "--profile=${cargo-profile}"
+            "--no-deps"
+          ]
+          ++ (if package != null then [ "--package=${pname}" ] else [ ])
+          ++ cargo-cmd-prefix
+        );
+      };
+    };
+
+  docs = {
+    all = docs-builder { };
+    pkg = builtins.mapAttrs (
+      dir: package:
+      docs-builder {
+        inherit package;
+      }
+    ) package-list;
+  };
+
+  dataplane-tar = pkgs.stdenv'.mkDerivation {
+    pname = "dataplane-tar";
     inherit version;
     dontUnpack = true;
     src = null;
@@ -406,6 +443,8 @@ let
         for f in "${pkgs.pkgsHostHost.dockerTools.fakeNss}/etc/"* ; do
           cp --archive "$(readlink -e "$f")" "$tmp/etc/$(basename "$f")"
         done
+        ln -s "${pkgs.pkgsHostHost.bash.out}/bin/bash" "$tmp/bin/bash"
+        ln -s "${pkgs.pkgsHostHost.bash.out}/bin/bash" "$tmp/bin/sh"
         cd "$tmp"
         # we take some care to make the tar file reproducible here
         tar \
@@ -468,43 +507,13 @@ let
           . \
           ${pkgs.pkgsHostHost.libc.out} \
           ${pkgs.pkgsHostHost.glibc.libgcc} \
+          ${pkgs.pkgsHostHost.bash.out} \
+          ${pkgs.pkgsHostHost.ncurses} \
+          ${pkgs.pkgsHostHost.readline} \
+          ${workspace.dataplane} \
+          ${workspace.cli} \
+          ${workspace.init} \
       '';
-
-  };
-
-  dataplane-tar = pkgs.stdenv'.mkDerivation {
-    pname = "dataplane-tar";
-    inherit version;
-    dontUnpack = true;
-    src = null;
-    buildPhase = ''
-      tmp="$(mktemp -d)"
-      tar xf "${min-tar}" -C "$tmp"
-      chown -R $(id -u):$(id -g) $tmp
-      chmod +w $tmp/bin
-      cp --dereference "${workspace.dataplane}/bin/dataplane" "$tmp/bin"
-      cp --dereference "${workspace.cli}/bin/cli" "$tmp/bin"
-      cp --dereference "${workspace.init}/bin/dataplane-init" "$tmp/bin"
-      ln -s cli "$tmp/bin/sh"
-      cd "$tmp"
-      # we take some care to make the tar file reproducible here
-      tar \
-        --create \
-        --file "$out" \
-        --sort=name \
-        --clamp-mtime \
-        --mtime=0 \
-        --format=posix \
-        --numeric-owner \
-        --owner=0 \
-        --group=0 \
-        --mode='ugo-sw' \
-        --no-acls \
-        --no-xattrs \
-        --no-selinux \
-        --verbose \
-        .
-    '';
 
   };
 
@@ -562,6 +571,59 @@ let
     };
   };
 
+  containers.frr.dataplane = pkgs.dockerTools.buildLayeredImage {
+    name = "githedgehog/frr-dataplane";
+    inherit tag;
+    contents = pkgs.buildEnv {
+      name = "frr-dataplane-env";
+      pathsToLink = [ "/" ];
+      paths = with frr-pkgs; [
+        bash
+        coreutils
+        dockerTools.usrBinEnv
+        fancy.dplane-plugin
+        fancy.dplane-rpc
+        fancy.frr-agent
+        fancy.frr-config
+        fancy.frr.dataplane
+        findutils
+        gnugrep
+        iproute2
+        jq
+        prometheus-frr-exporter
+        python3Minimal
+        tini
+      ];
+    };
+
+    fakeRootCommands = ''
+      #!${frr-pkgs.bash}/bin/bash
+      set -euxo pipefail
+      mkdir /tmp
+      mkdir -p /run/frr/hh
+      chown -R frr:frr /run/frr
+      mkdir -p /var
+      ln -s /run /var/run
+      chown -R frr:frr /var/run/frr
+    '';
+
+    enableFakechroot = true;
+  };
+
+  containers.frr.host = pkgs.dockerTools.buildLayeredImage {
+    name = "githedgehog/frr-host";
+    inherit tag;
+    contents = pkgs.buildEnv {
+      name = "frr-host-env";
+      pathsToLink = [
+        "/"
+      ];
+      paths = [
+        frr-pkgs.fancy.frr.host
+      ];
+    };
+  };
+
 in
 {
   inherit
@@ -571,7 +633,8 @@ in
     dev-pkgs
     devenv
     devroot
-    min-tar
+    docs
+    frr-pkgs
     package-list
     pkgs
     sources

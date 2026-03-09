@@ -127,7 +127,9 @@ jobs:
       matrix:
         nix-target:
           - tests.all
-          - dataplane-tar
+          - frr.dataplane
+          - frr.host
+          - dataplane
         build:
           - name: "debug"
             profile: "debug"
@@ -141,16 +143,16 @@ jobs:
         # and the build continues after they fail, but then summary
         # fails.  For now, comment this out, but ideally we'd run them
         # let them fail, but let the summary pass anyway
-        #          - name: "sanitize/address"
-        #            profile: "debug" # FIXME: should be fuzz, but build time explodes for unknown reasons
-        #            sanitize: "address"
-        #            instrument: "none" # FIXME: should be coverage, but build time explodes for unknown reasons
-        #            optional: true # FIXME: Make required once existing bugs are fixed
-        #          - name: "sanitize/thread"
-        #            profile: "fuzz"
-        #            sanitize: "thread"
-        #            instrument: "none" # FIXME: should be coverage, but build time explodes for unknown reasons
-        #            optional: true # FIXME: Make required once existing bugs are fixed
+        # - name: "sanitize/address"
+        #   profile: "debug" # FIXME: should be fuzz, but build time explodes for unknown reasons
+        #   sanitize: "address,leak"
+        #   instrument: "none" # FIXME: should be coverage, but build time explodes for unknown reasons
+        #   optional: true # FIXME: Make required once existing bugs are fixed
+        # - name: "sanitize/thread"
+        #   profile: "fuzz"
+        #   sanitize: "thread"
+        #   instrument: "none" # FIXME: should be coverage, but build time explodes for unknown reasons
+        #   optional: true # FIXME: Make required once existing bugs are fixed
         debug_justfile:
           - "${{ inputs.debug_justfile || false }}"
     steps:
@@ -196,41 +198,41 @@ jobs:
         run: |
           nix-shell --run "cargo deny check"
 
-      - name: "build packages"
-        run: |
-          nix build \
-            --file default.nix \
-            --argstr profile "${{matrix.build.profile}}" \
-            --argstr sanitize "${{matrix.build.sanitize}}" \
-            --argstr instrumentation "${{matrix.build.instrument}}" \
-            --out-link "results/${{matrix.nix-target}}" \
-            --print-build-logs \
-            ${{matrix.nix-target}}
-
       - name: "run tests"
         if: ${{ matrix.nix-target == 'tests.all' }}
         run: |
-          nix-shell --run "cargo nextest run --archive-file results/${{matrix.nix-target}}/*.tar.zst --workspace-remap $(pwd)"
+          just \
+            docker_sock=/run/docker/docker.sock \
+            debug_justfile="${{matrix.debug_justfile}}" \
+            profile="${{matrix.build.profile}}" \
+            sanitize="${{matrix.build.sanitize}}" \
+            instrument="${{matrix.build.instrument}}" \
+            test
 
       - name: "push container"
-        if: ${{ matrix.nix-target == 'dataplane-tar' }}
+        if: ${{ matrix.nix-target != 'tests.all' }}
         run: |
           just \
+            docker_sock=/run/docker/docker.sock \
             debug_justfile="${{matrix.debug_justfile}}" \
-            profile=${{matrix.build.profile}} \
-            version=${{ needs.version.outputs.version }}-${{ matrix.build.profile }} \
+            profile="${{matrix.build.profile}}" \
+            sanitize="${{matrix.build.sanitize}}" \
+            instrument="${{matrix.build.instrument}}" \
             oci_repo="ghcr.io" \
-            push-container
+            push-container "${{matrix.nix-target}}"
 
-      - name: "print container image name"
-        if: ${{ matrix.build.profile == 'release' || matrix.build.profile == 'debug' }}
+      - name: "push container for vlab"
+        if: ${{ matrix.nix-target != 'tests.all' }}
         run: |
           just \
+            docker_sock=/run/docker/docker.sock \
             debug_justfile="${{matrix.debug_justfile}}" \
-            profile=${{matrix.build.profile}} \
-            version=${{ needs.version.outputs.version }}-${{ matrix.build.profile }} \
+            profile="${{matrix.build.profile}}" \
+            sanitize="${{matrix.build.sanitize}}" \
+            instrument="${{matrix.build.instrument}}" \
+            version="${{ needs.version.outputs.version }}-${{ matrix.build.profile }}" \
             oci_repo="ghcr.io" \
-            print-container-tags
+            push-container "${{matrix.nix-target}}"
 
       - name: "Setup tmate session for debug"
         if: ${{ failure() && github.event_name == 'workflow_dispatch' && inputs.debug_enabled }}
@@ -273,7 +275,9 @@ jobs:
           && matrix.hybrid
         }}
       fabricatorref: master
-      prebuild: "just bump dataplane ${{ needs.version.outputs.version }}-release"
+      prebuild: |
+        just bump dataplane ${{ needs.version.outputs.version }}-release
+        just bump frr ${{ needs.version.outputs.version }}-release
       fabricmode: ${{ matrix.fabricmode }}
       gateway: ${{ matrix.gateway }}
       includeonie: ${{ matrix.includeonie }}
@@ -388,6 +392,7 @@ jobs:
           docker run --privileged --rm busybox:latest sh -c "echo $((2 * REQUIRED_HUGEPAGES)) > $HUGEPAGES_PATH"
           docker pull "$REGISTRY_URL/githedgehog/testn/n-vm:v0.0.9"
           just --yes \
+            docker_sock=/run/docker/docker.sock \
             debug_justfile="${{matrix.debug_justfile}}" \
             profile=${{matrix.profile}} \
             dpdp_sys_registry="${{env.CACHE_REGISTRY}}" \
@@ -411,10 +416,11 @@ jobs:
           path: fab-repo
           persist-credentials: false
 
-      - name: Bump dataplane in fabricator
+      - name: Bump dataplane+frr in fabricator
         working-directory: fab-repo
         run: |
           sed -i "s/^\tDataplaneVersion.*/\tDataplaneVersion=meta.Version(\"${{ github.ref_name }}\")/" pkg/fab/versions.go
+          sed -i "s/^\tFRRVersion.*/\tFRRVersion=meta.Version(\"${{ github.ref_name }}\")/" pkg/fab/versions.go
           go fmt pkg/fab/versions.go
 
       - name: Generate token for the fabricator repository
@@ -434,12 +440,12 @@ jobs:
           path: fab-repo
           branch: pr/auto/dataplane-bump
           commit-message: |
-            bump: dataplane to ${{ github.ref_name }}
+            bump: dataplane/frr to ${{ github.ref_name }}
 
             This is an automated commit created by GitHub Actions workflow,
             in the dataplane repository.
           signoff: true
-          title: "bump: dataplane to ${{ github.ref_name }}"
+          title: "bump: dataplane/frr to ${{ github.ref_name }}"
           body: |
             This is an automated Pull Request created by GitHub Actions workflow,
             in the dataplane repository.
