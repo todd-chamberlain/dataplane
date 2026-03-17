@@ -146,15 +146,15 @@ push-container target="dataplane" *args: (build-container target args) && versio
     {{ _setup_docker_env_ }}
     case "{{target}}" in
         "dataplane" | "dataplane-tar")
-            skopeo copy --dest-tls-verify=false docker-daemon:{{ oci_image_dataplane }} docker://{{ oci_image_dataplane }}
+            skopeo copy --src-daemon-host="{{docker_sock}}" --dest-tls-verify=false docker-daemon:{{ oci_image_dataplane }} docker://{{ oci_image_dataplane }}
             echo "Pushed {{ oci_image_dataplane }}"
             ;;
         "frr.dataplane")
-            skopeo copy --dest-tls-verify=false docker-daemon:{{oci_image_frr_dataplane}} docker://{{oci_image_frr_dataplane}}
+            skopeo copy --src-daemon-host="{{docker_sock}}" --dest-tls-verify=false docker-daemon:{{oci_image_frr_dataplane}} docker://{{oci_image_frr_dataplane}}
             echo "Pushed {{ oci_image_frr_dataplane }}"
             ;;
         "frr.host")
-            skopeo copy --dest-tls-verify=false docker-daemon:{{oci_image_frr_host}} docker://{{oci_image_frr_host}}
+            skopeo copy --src-daemon-host="{{docker_sock}}" --dest-tls-verify=false docker-daemon:{{oci_image_frr_host}} docker://{{oci_image_frr_host}}
             echo "Pushed {{ oci_image_frr_host }}"
             ;;
         *)
