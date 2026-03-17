@@ -568,10 +568,6 @@ let
           bash
           coreutils
           dockerTools.usrBinEnv
-          fancy.dplane-plugin
-          fancy.dplane-rpc
-          fancy.frr-agent
-          fancy.frr-config
           fancy.frr.host
           findutils
           gnugrep
