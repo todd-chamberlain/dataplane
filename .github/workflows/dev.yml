@@ -219,7 +219,7 @@ jobs:
             profile="${{matrix.build.profile}}" \
             sanitize="${{matrix.build.sanitize}}" \
             instrument="${{matrix.build.instrument}}" \
-            oci_repo="ghcr.io" \
+            oci_repo="run.h.hhdev.io:30000" \
             push-container "${{matrix.nix-target}}"
 
       - name: "push container for vlab"
@@ -232,7 +232,7 @@ jobs:
             sanitize="${{matrix.build.sanitize}}" \
             instrument="${{matrix.build.instrument}}" \
             version="${{ needs.version.outputs.version }}-${{ matrix.build.profile }}" \
-            oci_repo="ghcr.io" \
+            oci_repo="run.h.hhdev.io:30000" \
             push-container "${{matrix.nix-target}}"
 
       - name: "Setup tmate session for debug"
