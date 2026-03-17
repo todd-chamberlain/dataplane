@@ -58,8 +58,10 @@ docker_sock := "/var/run/docker.sock"
 # Set DOCKER_HOST and DOCKER_SOCK if docker.sock exists and they are not already set
 [private]
 _setup_docker_env_ := ```
-    declare -xr DOCKER_HOST="${DOCKER_HOST:-unix://{{docker_sock}}}"
-    declare -xr DOCKER_SOCK="${DOCKER_SOCK:-{{docker_sock}}}"
+    declare -xr DOCKER_HOST="${DOCKER_HOST:-"unix://{{docker_sock}}"}"
+    declare -xr DOCKER_SOCK="${DOCKER_SOCK:-"{{docker_sock}}"}"
+    export DOCKER_HOST
+    export DOCKER_SOCK
 ```
 
 # Build a nix derivation with standard build arguments
