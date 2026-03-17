@@ -543,7 +543,7 @@ let
       ];
       paths = [
         pkgs.pkgsHostHost.dockerTools.fakeNss
-        pkgs.pkgsBuildHost.busybox
+        pkgs.pkgsHostHost.busybox
         workspace.cli
         workspace.dataplane
         workspace.init
