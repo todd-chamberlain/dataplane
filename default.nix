@@ -445,6 +445,9 @@ let
         done
         ln -s "${pkgs.pkgsHostHost.bash.out}/bin/bash" "$tmp/bin/bash"
         ln -s "${pkgs.pkgsHostHost.bash.out}/bin/bash" "$tmp/bin/sh"
+        ln -s "${workspace.dataplane}/bin/dataplane" "$tmp/bin/dataplane"
+        ln -s "${workspace.cli}/bin/cli" "$tmp/bin/cli"
+        ln -s "${workspace.init}/bin/dataplane-init" "$tmp/bin/dataplane-init"
         cd "$tmp"
         # we take some care to make the tar file reproducible here
         tar \
