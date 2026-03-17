@@ -98,17 +98,17 @@ docs package="" *args: (build (if package == "" { "docs.all" } else { "docs.pkg.
 setup-roots *args:
     {{ _just_debuggable_ }}
     nix build -f default.nix devroot \
-      --argstr profile {{ profile }} \
+      --argstr profile '{{ profile }}' \
       --argstr sanitize '{{ sanitize }}' \
-      --argstr instrumentation {{ instrument }} \
-      --argstr platform {{ platform }} \
+      --argstr instrumentation '{{ instrument }}' \
+      --argstr platform '{{ platform }}' \
       --out-link devroot \
       {{ args }}
     nix build -f default.nix sysroot \
-      --argstr profile {{ profile }} \
+      --argstr profile '{{ profile }}' \
       --argstr sanitize '{{ sanitize }}' \
-      --argstr instrumentation {{ instrument }} \
-      --argstr platform {{ platform }} \
+      --argstr instrumentation '{{ instrument }}' \
+      --argstr platform '{{ platform }}' \
       --out-link sysroot \
       {{ args }}
 
