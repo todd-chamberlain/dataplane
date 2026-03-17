@@ -58,7 +58,7 @@ docker_sock := "/run/docker/docker.sock"
 # Set DOCKER_HOST and DOCKER_SOCK if /var/run/docker.sock exists and they are not already set
 [private]
 _setup_docker_env_ := ```
-    if [ -S /var/run/docker.sock ]; then
+    if [ -S {{docker_sock}} ]; then
       declare -r DOCKER_HOST="${DOCKER_HOST:-unix:/{{docker_sock}}}"
       declare -r DOCKER_SOCK="${DOCKER_SOCK:-{{docker_sock}}}"
       export DOCKER_HOST
