@@ -66,7 +66,7 @@ _setup_docker_env_ := ```
 
 # Build a nix derivation with standard build arguments
 [script]
-build target="dataplane-tar" *args:
+build target="containers.dataplane" *args:
     {{ _just_debuggable_ }}
     mkdir -p results
     declare -r target="{{target}}"
@@ -114,12 +114,12 @@ setup-roots *args:
 
 # Build the dataplane container image
 [script]
-build-container target="dataplane" *args: (build (if target == "dataplane" { "dataplane-tar" } else { "containers." + target }) args)
+build-container target="dataplane" *args: (build ("containers." + target) args)
     {{ _just_debuggable_ }}
     {{ _setup_docker_env_ }}
     declare -xr DOCKER_HOST="${DOCKER_HOST:-unix://{{docker_sock}}}"
     case "{{target}}" in
-        "dataplane" | "dataplane-tar")
+        "dataplane")
             docker import --change "ENV PATH=/bin" --change 'ENTRYPOINT ["/bin/dataplane"]' ./results/dataplane-tar {{ oci_image_dataplane }}
             echo "imported {{ oci_image_dataplane }}"
             ;;
@@ -145,7 +145,7 @@ push-container target="dataplane" *args: (build-container target args) && versio
     {{ _setup_docker_env_ }}
     declare -xr DOCKER_HOST="${DOCKER_HOST:-unix://{{docker_sock}}}"
     case "{{target}}" in
-        "dataplane" | "dataplane-tar")
+        "dataplane")
             skopeo copy --src-daemon-host="${DOCKER_HOST}" --dest-tls-verify=false docker-daemon:{{ oci_image_dataplane }} docker://{{ oci_image_dataplane }}
             echo "Pushed {{ oci_image_dataplane }}"
             ;;

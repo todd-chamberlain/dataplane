@@ -215,8 +215,8 @@ let
         strictDeps = true;
         dontStrip = true;
         doRemapPathPrefix = false; # TODO: this setting may be wrong, test with debugger
-        doNotRemoveReferencesToRustToolchain = true;
-        doNotRemoveReferencesToVendorDir = true;
+        removeReferencesToRustToolchain = true;
+        removeReferencesToVendorDir = true;
         separateDebugInfo = true;
 
         nativeBuildInputs = [
@@ -225,6 +225,7 @@ let
           llvmPackages'.clang
           llvmPackages'.lld
           pkg-config
+          pkgs.pkgsBuildHost.nukeReferences
         ];
 
         buildInputs = [
@@ -289,7 +290,7 @@ let
           rm -f $out/target.tar.zst
         '';
       });
-  package-builder =
+  workspace-builder =
     {
       pname ? null,
       cargoArtifacts ? null,
@@ -311,12 +312,21 @@ let
             "--message-format json-render-diagnostics > $cargoBuildLog"
           ]
         );
+        preFixup = ''
+          find "$out" \
+            -type f \
+            -exec nuke-refs \
+            -e "$out" \
+            -e ${pkgs.stdenv'.cc.libc} \
+            -e ${pkgs.pkgsHostHost.glibc.libgcc} \
+            '{}' +;
+        '';
       };
     };
 
   workspace = builtins.mapAttrs (
     dir: pname:
-    package-builder {
+    workspace-builder {
       inherit pname;
     }
   ) package-list;
@@ -520,6 +530,28 @@ let
 
   };
 
+  containers.dataplane = pkgs.dockerTools.buildLayeredImage {
+    name = "dataplane";
+    tag = "latest";
+    contents = pkgs.buildEnv {
+      name = "dataplane-debugger-env";
+      pathsToLink = [
+        "/bin"
+        "/etc"
+        "/var"
+        "/lib"
+      ];
+      paths = [
+        pkgs.pkgsHostHost.dockerTools.fakeNss
+        pkgs.pkgsBuildHost.busybox
+        workspace.cli
+        workspace.dataplane
+        workspace.init
+      ];
+    };
+
+  };
+
   containers.libc = pkgs.dockerTools.buildLayeredImage {
     name = "dataplane-debugger";
     tag = "latest";
@@ -549,7 +581,7 @@ let
 
   containers.dataplane-debugger = pkgs.dockerTools.buildLayeredImage {
     name = "dataplane-debugger";
-    tag = "latest";
+    inherit tag;
     contents = pkgs.buildEnv {
       name = "dataplane-debugger-env";
       pathsToLink = [
