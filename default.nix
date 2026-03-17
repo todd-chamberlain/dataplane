@@ -587,7 +587,6 @@ in
   inherit
     clippy
     containers
-    dataplane-tar
     dev-pkgs
     devenv
     devroot
