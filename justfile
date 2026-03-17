@@ -121,7 +121,7 @@ build-container target="dataplane" *args: (build ("containers." + target) args)
     case "{{target}}" in
         "dataplane")
             docker load < ./results/containers.dataplane
-            docker tag "dataplane:latest" "{{oci_image_frr_dataplane}}"
+            docker tag "dataplane:latest" "{{oci_image_dataplane}}"
             echo "imported {{ oci_image_dataplane }}"
             ;;
         "frr.dataplane")
