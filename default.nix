@@ -312,15 +312,15 @@ let
             "--message-format json-render-diagnostics > $cargoBuildLog"
           ]
         );
-        preFixup = ''
-          find "$out" \
-            -type f \
-            -exec nuke-refs \
-            -e "$out" \
-            -e ${pkgs.stdenv'.cc.libc} \
-            -e ${pkgs.pkgsHostHost.glibc.libgcc} \
-            '{}' +;
-        '';
+        # preFixup = ''
+        #   find "$out" \
+        #     -type f \
+        #     -exec nuke-refs \
+        #     -e "$out" \
+        #     -e ${pkgs.stdenv'.cc.libc} \
+        #     -e ${pkgs.pkgsHostHost.glibc.libgcc} \
+        #     '{}' +;
+        # '';
       };
     };
 
@@ -496,7 +496,6 @@ let
       paths = with frr-pkgs; [
         bash
         coreutils
-        dockerTools.fakeNss
         dockerTools.usrBinEnv
         fancy.dplane-plugin
         fancy.dplane-rpc
