@@ -58,12 +58,8 @@ docker_sock := "/var/run/docker.sock"
 # Set DOCKER_HOST and DOCKER_SOCK if docker.sock exists and they are not already set
 [private]
 _setup_docker_env_ := ```
-    if [ -S {{docker_sock}} ]; then
-      declare -r DOCKER_HOST="${DOCKER_HOST:-unix:/{{docker_sock}}}"
-      declare -r DOCKER_SOCK="${DOCKER_SOCK:-{{docker_sock}}}"
-      export DOCKER_HOST
-      export DOCKER_SOCK
-    fi
+    declare -xr DOCKER_HOST="${DOCKER_HOST:-unix://{{docker_sock}}}"
+    declare -xr DOCKER_SOCK="${DOCKER_SOCK:-{{docker_sock}}}"
 ```
 
 # Build a nix derivation with standard build arguments
@@ -146,15 +142,15 @@ push-container target="dataplane" *args: (build-container target args) && versio
     {{ _setup_docker_env_ }}
     case "{{target}}" in
         "dataplane" | "dataplane-tar")
-            skopeo copy --src-daemon-host="unix://{{docker_sock}}" --dest-tls-verify=false docker-daemon:{{ oci_image_dataplane }} docker://{{ oci_image_dataplane }}
+            skopeo copy --src-daemon-host="${DOCKER_HOST}" --dest-tls-verify=false docker-daemon:{{ oci_image_dataplane }} docker://{{ oci_image_dataplane }}
             echo "Pushed {{ oci_image_dataplane }}"
             ;;
         "frr.dataplane")
-            skopeo copy --src-daemon-host="unix://{{docker_sock}}" --dest-tls-verify=false docker-daemon:{{oci_image_frr_dataplane}} docker://{{oci_image_frr_dataplane}}
+            skopeo copy --src-daemon-host="${DOCKER_HOST}" --dest-tls-verify=false docker-daemon:{{oci_image_frr_dataplane}} docker://{{oci_image_frr_dataplane}}
             echo "Pushed {{ oci_image_frr_dataplane }}"
             ;;
         "frr.host")
-            skopeo copy --src-daemon-host="unix://{{docker_sock}}" --dest-tls-verify=false docker-daemon:{{oci_image_frr_host}} docker://{{oci_image_frr_host}}
+            skopeo copy --src-daemon-host="${DOCKER_HOST}" --dest-tls-verify=false docker-daemon:{{oci_image_frr_host}} docker://{{oci_image_frr_host}}
             echo "Pushed {{ oci_image_frr_host }}"
             ;;
         *)
