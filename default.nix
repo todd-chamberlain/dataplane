@@ -550,7 +550,6 @@ let
       ];
     };
     config.Entrypoint = ["/bin/dataplane"];
-
   };
 
   containers.libc = pkgs.dockerTools.buildLayeredImage {
