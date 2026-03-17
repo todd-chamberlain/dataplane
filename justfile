@@ -58,8 +58,8 @@ docker_sock := "/var/run/docker.sock"
 # Set DOCKER_HOST and DOCKER_SOCK if docker.sock exists and they are not already set
 [private]
 _setup_docker_env_ := ```
-    declare -xr DOCKER_HOST="${DOCKER_HOST:-"unix://{{docker_sock}}"}"
-    declare -xr DOCKER_SOCK="${DOCKER_SOCK:-"{{docker_sock}}"}"
+    declare -xr DOCKER_HOST="${DOCKER_HOST:-unix://{{docker_sock}}}"
+    declare -xr DOCKER_SOCK="${DOCKER_SOCK:-{{docker_sock}}}"
     export DOCKER_HOST
     export DOCKER_SOCK
 ```
@@ -117,6 +117,7 @@ setup-roots *args:
 build-container target="dataplane" *args: (build (if target == "dataplane" { "dataplane-tar" } else { "containers." + target }) args)
     {{ _just_debuggable_ }}
     {{ _setup_docker_env_ }}
+    declare -xr DOCKER_HOST="${DOCKER_HOST:-unix://{{docker_sock}}}"
     case "{{target}}" in
         "dataplane" | "dataplane-tar")
             docker import --change "ENV PATH=/bin" --change 'ENTRYPOINT ["/bin/dataplane"]' ./results/dataplane-tar {{ oci_image_dataplane }}
@@ -142,6 +143,7 @@ build-container target="dataplane" *args: (build (if target == "dataplane" { "da
 push-container target="dataplane" *args: (build-container target args) && version
     {{ _just_debuggable_ }}
     {{ _setup_docker_env_ }}
+    declare -xr DOCKER_HOST="${DOCKER_HOST:-unix://{{docker_sock}}}"
     case "{{target}}" in
         "dataplane" | "dataplane-tar")
             skopeo copy --src-daemon-host="${DOCKER_HOST}" --dest-tls-verify=false docker-daemon:{{ oci_image_dataplane }} docker://{{ oci_image_dataplane }}
