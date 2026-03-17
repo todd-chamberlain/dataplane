@@ -120,12 +120,13 @@ build-container target="dataplane" *args: (build ("containers." + target) args)
     declare -xr DOCKER_HOST="${DOCKER_HOST:-unix://{{docker_sock}}}"
     case "{{target}}" in
         "dataplane")
-            docker import --change "ENV PATH=/bin" --change 'ENTRYPOINT ["/bin/dataplane"]' ./results/dataplane-tar {{ oci_image_dataplane }}
+            docker load < ./results/containers.dataplane
+            docker tag "dataplane:latest" "{{oci_image_frr_dataplane}}"
             echo "imported {{ oci_image_dataplane }}"
             ;;
         "frr.dataplane")
             docker load < ./results/containers.frr.dataplane
-            docker tag "githedgehog/frr-dataplane:latest" "{{oci_image_frr_dataplane}}"
+            docker tag "githedgehog/frr/dataplane:latest" "{{oci_image_frr_dataplane}}"
             echo "imported {{oci_image_frr_dataplane}}"
             ;;
         "frr.host")
