@@ -523,6 +523,7 @@ let
       paths = with frr-pkgs; [
         bash
         coreutils
+        dockerTools.fakeNss
         dockerTools.usrBinEnv
         fancy.dplane-plugin
         fancy.dplane-rpc
@@ -567,6 +568,7 @@ let
       paths = with frr-pkgs; [
           bash
           coreutils
+          dockerTools.fakeNss
           dockerTools.usrBinEnv
           fancy.frr.host
           findutils
