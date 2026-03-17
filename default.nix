@@ -549,6 +549,7 @@ let
         workspace.init
       ];
     };
+    config.Entrypoint = ["/bin/dataplane"];
 
   };
 
