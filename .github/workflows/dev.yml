@@ -391,17 +391,12 @@ jobs:
           docker run --privileged --rm busybox:latest sh -c "echo $((6 * REQUIRED_HUGEPAGES)) > $OVERCOMMIT_HUGEPAGES_PATH"
           docker run --privileged --rm busybox:latest sh -c "echo $((2 * REQUIRED_HUGEPAGES)) > $HUGEPAGES_PATH"
           docker pull "$REGISTRY_URL/githedgehog/testn/n-vm:v0.0.9"
-          just --yes \
-            docker_sock=/run/docker/docker.sock \
-            debug_justfile="${{matrix.debug_justfile}}" \
-            profile=${{matrix.profile}} \
-            dpdp_sys_registry="${{env.CACHE_REGISTRY}}" \
-            refresh-compile-env
           just --yes debug_justfile="${{matrix.debug_justfile}}" fake-nix
 
       - name: "push container"
         run: |
           just \
+            docker_sock=/run/docker/docker.sock \
             debug_justfile="${{matrix.debug_justfile}}" \
             profile=release \
             oci_repo="ghcr.io" \

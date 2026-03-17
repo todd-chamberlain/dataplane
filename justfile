@@ -53,9 +53,9 @@ oci_image_frr_host := oci_repo + "/" + oci_frr_prefix + "-host:" + version
 _skopeo_dest_insecure := if oci_insecure == "true" { "--dest-tls-verify=false" } else { "" }
 
 [private]
-docker_sock := "/run/docker/docker.sock"
+docker_sock := "/var/run/docker.sock"
 
-# Set DOCKER_HOST and DOCKER_SOCK if /var/run/docker.sock exists and they are not already set
+# Set DOCKER_HOST and DOCKER_SOCK if docker.sock exists and they are not already set
 [private]
 _setup_docker_env_ := ```
     if [ -S {{docker_sock}} ]; then
