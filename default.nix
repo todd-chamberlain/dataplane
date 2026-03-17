@@ -451,6 +451,7 @@ let
       paths = [
         pkgs.pkgsHostHost.dockerTools.fakeNss
         pkgs.pkgsHostHost.busybox
+        pkgs.pkgsHostHost.dockerTools.usrBinEnv
         workspace.cli
         workspace.dataplane
         workspace.init
@@ -563,10 +564,26 @@ let
       pathsToLink = [
         "/"
       ];
-      paths = [
-        frr-pkgs.fancy.frr.host
+      paths = with frr-pkgs; [
+          bash
+          coreutils
+          dockerTools.usrBinEnv
+          fancy.dplane-plugin
+          fancy.dplane-rpc
+          fancy.frr-agent
+          fancy.frr-config
+          fancy.frr.host
+          findutils
+          gnugrep
+          iproute2
+          jq
+          prometheus-frr-exporter
+          python3Minimal
+          tini
       ];
     };
+    config.Entrypoint = ["/bin/tini" "--"];
+    config.Cmd = ["/libexec/frr/docker-start"];
   };
 
 in
